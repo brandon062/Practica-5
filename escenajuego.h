@@ -4,6 +4,7 @@
 #include <QGraphicsScene>
 #include <QTimer>
 #include <QVector>
+#include <QGraphicsPixmapItem>
 #include "vector2d.h"
 #include "bloqueestructura.h"
 
@@ -62,15 +63,15 @@ private:
     QVector<BloqueEstructura*> m_bloquesIzquierda;
     QVector<BloqueEstructura*> m_bloquesDerecha;
 
-    // Rivales (solo se pueden golpear cuando ya no quedan bloques)
-    QGraphicsRectItem *m_rivalIzquierda{nullptr};
-    QGraphicsRectItem *m_rivalDerecha{nullptr};
+    // Rivales: ahora sprites
+    QGraphicsPixmapItem *m_rivalIzquierda{nullptr};
+    QGraphicsPixmapItem *m_rivalDerecha{nullptr};
 
-    // Cañones y sus plataformas (solo decorativo, no reciben daño)
-    QGraphicsRectItem *m_canionIzquierda{nullptr};
-    QGraphicsRectItem *m_canionDerecha{nullptr};
-    QGraphicsRectItem *m_plataformaIzquierda{nullptr};
-    QGraphicsRectItem *m_plataformaDerecha{nullptr};
+    // Cañones y sus plataformas (los cañones ahora son sprites)
+    QGraphicsPixmapItem *m_canionIzquierda{nullptr};
+    QGraphicsPixmapItem *m_canionDerecha{nullptr};
+    QGraphicsRectItem   *m_plataformaIzquierda{nullptr};
+    QGraphicsRectItem   *m_plataformaDerecha{nullptr};
 
     double m_ancho{1200.0};
     double m_alto{600.0};
@@ -81,3 +82,4 @@ private:
 };
 
 #endif // ESCENAJUEGO_H
+

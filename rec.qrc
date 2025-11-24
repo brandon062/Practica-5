@@ -1,0 +1,7 @@
+<RCC>
+    <qresource prefix="/new/images">
+        <file>canon.png</file>
+        <file>personaje1.png</file>
+        <file>personaje2.png</file>
+    </qresource>
+</RCC>

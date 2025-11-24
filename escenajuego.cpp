@@ -2,6 +2,8 @@
 #include <QtMath>
 #include <QGraphicsEllipseItem>
 #include <QGraphicsRectItem>
+#include <QGraphicsPixmapItem>
+#include <QTransform>
 #include <algorithm>    // std::min, std::max
 #include <cmath>        // std::abs
 
@@ -30,11 +32,13 @@ void EscenaJuego::configurarMundo()
     double yBase = m_alto - 20;
     double anchoColumna = 60;
     double altoColumna = 200;
-    double separacion = 20;
+    double separacion = 45;
     double altoTecho = 60;
-    double xBaseIzq = 150;
 
-    // ----------- LADO IZQUIERDO (bloques + rival) -----------
+    // Un poco más adentro de la pared izquierda
+    double xBaseIzq = 200;
+
+    // ----------- LADO IZQUIERDO (bloques) -----------
     BloqueEstructura *izqCol1 = new BloqueEstructura(
         QRectF(xBaseIzq, yBase - altoColumna,
                anchoColumna, altoColumna), 200);
@@ -51,13 +55,7 @@ void EscenaJuego::configurarMundo()
     addItem(izqTecho);
     m_bloquesIzquierda << izqTecho;
 
-    // "Rival" izquierdo detrás de la estructura
-    m_rivalIzquierda = addRect(
-        xBaseIzq + anchoColumna*0.5, yBase - altoColumna + 20,
-        anchoColumna, altoColumna - 40,
-        QPen(Qt::black), QBrush(QColor(255,230,200)));
-
-    // ----------- LADO DERECHO (bloques + rival) -----------
+    // ----------- LADO DERECHO (bloques) -----------
     double xBaseDer = m_ancho - xBaseIzq - 2*anchoColumna - separacion;
 
     BloqueEstructura *derCol1 = new BloqueEstructura(
@@ -75,39 +73,88 @@ void EscenaJuego::configurarMundo()
     addItem(derTecho);
     m_bloquesDerecha << derTecho;
 
-    m_rivalDerecha = addRect(
-        xBaseDer + anchoColumna*0.5, yBase - altoColumna + 20,
-        anchoColumna, altoColumna - 40,
-        QPen(Qt::black), QBrush(QColor(255,230,200)));
+    // ----------- SPRITES DE PERSONAJES -----------
 
-    // ----------- CAÑONES CENTRADOS EN LOS LATERALES -----------
+    // Cargamos sprites y se les ajusta el tamaño
+    QPixmap spritePersonaje1(":/new/images/personaje1.png");
+    spritePersonaje1 = spritePersonaje1.scaled(
+        100, 100, Qt::KeepAspectRatio, Qt::SmoothTransformation);
 
-    // Altura media de la escena
+    QPixmap spritePersonaje2(":/new/images/personaje2.png");
+    spritePersonaje2 = spritePersonaje2.scaled(
+        100, 100, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+
+    // Personaje izquierdo = personaje1.png
+    m_rivalIzquierda = addPixmap(spritePersonaje1);
+    m_rivalIzquierda->setZValue(1);  // delante de bloques
+
+    // Se coloca centrado ENTRE las dos columnas
+    double anchoEstructura = 2*anchoColumna + separacion;
+    double xCentroEstrIzq = xBaseIzq + anchoEstructura / 2.0;
+    double yPersonaje = yBase - spritePersonaje1.height() - 10;
+
+    m_rivalIzquierda->setPos(xCentroEstrIzq - spritePersonaje1.width()/2.0,
+                             yPersonaje);
+
+    // Personaje derecho = personaje2.png, también centrado en su estructura
+    m_rivalDerecha = addPixmap(spritePersonaje2);
+    m_rivalDerecha->setZValue(1);
+
+    double xCentroEstrDer = xBaseDer + anchoEstructura / 2.0;
+
+    m_rivalDerecha->setPos(xCentroEstrDer - spritePersonaje2.width()/2.0,
+                           yPersonaje);
+
+    // ----------- CAÑONES CENTRADOS EN LOS LATERALES (sprites) -----------
+
+    // Sprite base del cañón, escalado
+    QPixmap spriteCanon(":/new/images/canon.png");
+    spriteCanon = spriteCanon.scaled(
+        80, 70, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+
+    // Versión espejada para el cañón izquierdo
+    QPixmap spriteCanonIzq = spriteCanon.transformed(
+        QTransform().scale(-1, 1));
+
     double yCentro = m_alto / 2.0;
 
-    // Plataforma izquierda (no recibe daño, solo decorativa)
+    double anchoPlataforma = 80;
+    double altoPlataforma  = 10;
+    double xPlataformaMargen = 10;   // separación de la pared
+
+    // Plataforma izquierda (no recibe daño)
     m_plataformaIzquierda = addRect(
-        20, yCentro + 10,      // posición
-        70, 10,                // ancho/alto
+        xPlataformaMargen,
+        yCentro + 10,
+        anchoPlataforma,
+        altoPlataforma,
         QPen(Qt::black), QBrush(Qt::darkGray));
 
-    // Cañón izquierdo encima de la plataforma
-    m_canionIzquierda = addRect(
-        30, yCentro - 10,      // posición
-        40, 20,                // ancho/alto
-        QPen(Qt::black), QBrush(Qt::blue));
+    // Cañón izquierdo: usa sprite espejado (mira a la derecha)
+    m_canionIzquierda = addPixmap(spriteCanonIzq);
+    m_canionIzquierda->setZValue(1);
+
+    double xCanonIzq = xPlataformaMargen + anchoPlataforma/2.0;
+    double yCanon    = yCentro - spriteCanonIzq.height()/2.0;
+
+    m_canionIzquierda->setPos(xCanonIzq - spriteCanonIzq.width()/2.0,
+                              yCanon);
 
     // Plataforma derecha
     m_plataformaDerecha = addRect(
-        m_ancho - 90, yCentro + 10,
-        70, 10,
+        m_ancho - xPlataformaMargen - anchoPlataforma,
+        yCentro + 10,
+        anchoPlataforma,
+        altoPlataforma,
         QPen(Qt::black), QBrush(Qt::darkGray));
 
-    // Cañón derecho encima de la plataforma
-    m_canionDerecha = addRect(
-        m_ancho - 70, yCentro - 10,
-        40, 20,
-        QPen(Qt::black), QBrush(Qt::blue));
+    // Cañón derecho: sprite original (mira hacia la izquierda)
+    m_canionDerecha = addPixmap(spriteCanon);
+    m_canionDerecha->setZValue(1);
+
+    double xCanonDer = m_ancho - xPlataformaMargen - anchoPlataforma/2.0;
+    m_canionDerecha->setPos(xCanonDer - spriteCanon.width()/2.0,
+                            yCanon);
 }
 
 // Lógica para iniciar un disparo desde el bando que tenga el turno.
@@ -119,6 +166,7 @@ void EscenaJuego::dispararProyectil(double anguloGrados, double velocidad)
 }
 
 // Posiciona y configura el proyectil según el bando (izquierda/derecha).
+
 void EscenaJuego::reiniciarProyectil(Bando bando,
                                      double anguloGrados,
                                      double velocidad)
@@ -131,22 +179,25 @@ void EscenaJuego::reiniciarProyectil(Bando bando,
     double rad = qDegreesToRadians(anguloGrados);
 
     if (bando == Izquierda) {
-        // Punto de salida: centro del cañón izquierdo
-        QRectF r = m_canionIzquierda->rect();
-        QPointF centro = r.center() + m_canionIzquierda->pos();
+        // Centro del cañón izquierdo
+        QRectF r = m_canionIzquierda->boundingRect();
+        QPointF centro = m_canionIzquierda->mapToScene(r.center());
         m_proyectil.posicion = Vector2D(centro.x(), centro.y());
+
+        // Disparo hacia la derecha
         m_proyectil.velocidad.x =  velocidad * qCos(rad);
         m_proyectil.velocidad.y = -velocidad * qSin(rad);
     } else {
-        // Punto de salida: centro del cañón derecho
-        QRectF r = m_canionDerecha->rect();
-        QPointF centro = r.center() + m_canionDerecha->pos();
+        // Centro del cañón derecho
+        QRectF r = m_canionDerecha->boundingRect();
+        QPointF centro = m_canionDerecha->mapToScene(r.center());
         m_proyectil.posicion = Vector2D(centro.x(), centro.y());
+
+        // Disparo hacia la izquierda
         m_proyectil.velocidad.x = -velocidad * qCos(rad);
         m_proyectil.velocidad.y = -velocidad * qSin(rad);
     }
 
-    // Si el ítem gráfico del proyectil no existe, lo creamos.
     if (!m_itemProyectil) {
         m_itemProyectil = addEllipse(
             0, 0,
@@ -175,7 +226,7 @@ void EscenaJuego::actualizarSimulacion()
     m_proyectil.tiempoVida += dt;
     double vel = magnitud(m_proyectil.velocidad);
 
-    // Condiciones para "matar" el proyectil y pasar turno.
+    // Condiciones para eliminar el proyectil y pasar turno.
     if (m_proyectil.posicion.y - m_proyectil.radio > m_alto + 50 ||
         m_proyectil.posicion.x + m_proyectil.radio < -50 ||
         m_proyectil.posicion.x - m_proyectil.radio > m_ancho + 50 ||
