@@ -9,11 +9,15 @@ CONFIG += c++17
 #DEFINES += QT_DISABLE_DEPRECATED_BEFORE=0x060000    # disables all the APIs deprecated before Qt 6.0.0
 
 SOURCES += \
-    main.cpp
+    escenajuego.cpp \
+    main.cpp \
+    ventanaprincipal.cpp
 
 HEADERS += \
     bloqueestructura.h \
-    vector2d.h
+    escenajuego.h \
+    vector2d.h \
+    ventanaprincipal.h
 
 FORMS +=
 
