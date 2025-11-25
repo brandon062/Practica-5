@@ -9,6 +9,7 @@
 #include <QAudioOutput>
 #include "vector2d.h"
 #include "bloqueestructura.h"
+#include <QGraphicsTextItem>
 
 class EscenaJuego : public QGraphicsScene
 {
@@ -21,6 +22,9 @@ public:
 
     Bando turnoActual() const { return m_turno; }
     void dispararProyectil(double anguloGrados, double velocidad);
+
+    // --- reiniciar el juego ---
+    Q_INVOKABLE void reiniciarJuego();
 
 signals:
     void turnoCambiado(EscenaJuego::Bando nuevoTurno);
@@ -87,6 +91,14 @@ private:
 
     QMediaPlayer *musicaFondo2{nullptr};
     QAudioOutput *audioMusica2{nullptr};
+
+    // --- sonido de victoria ---
+    QMediaPlayer *sonidoVictoria{nullptr};
+    QAudioOutput *audioVictoria{nullptr};
+
+    // --- texto de fin de partida ---
+    QGraphicsTextItem *m_textoFin{nullptr};
+    bool m_hayGanador{false};
 };
 
 #endif // ESCENAJUEGO_H

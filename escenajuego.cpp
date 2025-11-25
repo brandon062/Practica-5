@@ -8,8 +8,6 @@
 #include <cmath>        // std::
 #include <QSoundEffect>
 
-#include <QDebug>  // arriba del archivo
-
 EscenaJuego::EscenaJuego(QObject *parent)
     : QGraphicsScene(parent),
     m_turno(Izquierda)
@@ -39,20 +37,26 @@ EscenaJuego::EscenaJuego(QObject *parent)
     audioDestruccion->setVolume(0.8);
     sonidoDestruccion->setSource(QUrl("qrc:/new/sonidos/destruccion.mp3"));
 
+    // SONIDO DE VICTORIA
+    sonidoVictoria = new QMediaPlayer(this);
+    audioVictoria  = new QAudioOutput(this);
+    sonidoVictoria->setAudioOutput(audioVictoria);
+    audioVictoria->setVolume(0.8);
+    sonidoVictoria->setSource(QUrl("qrc:/new/sonidos/winning.mp3"));
+
     // ------------------ MÚSICA DE FONDO ---------------------
     musicaFondo1 = new QMediaPlayer(this);
     audioMusica1 = new QAudioOutput(this);
     musicaFondo1->setAudioOutput(audioMusica1);
-    audioMusica1->setVolume(0.08);  // volumen música 1
+    audioMusica1->setVolume(0.08);
     musicaFondo1->setSource(QUrl("qrc:/new/sonidos/cancion1.mp3"));
 
     musicaFondo2 = new QMediaPlayer(this);
     audioMusica2 = new QAudioOutput(this);
     musicaFondo2->setAudioOutput(audioMusica2);
-    audioMusica2->setVolume(0.08);  // volumen música 2
+    audioMusica2->setVolume(0.08);
     musicaFondo2->setSource(QUrl("qrc:/new/sonidos/cancion2.mp3"));
 
-    // Cuando termine la canción 1, reproducir la 2
     connect(musicaFondo1, &QMediaPlayer::mediaStatusChanged,
             this, [this](QMediaPlayer::MediaStatus status){
                 if (status == QMediaPlayer::EndOfMedia) {
@@ -60,7 +64,6 @@ EscenaJuego::EscenaJuego(QObject *parent)
                 }
             });
 
-    // Cuando termine la canción 2, volver a la 1 (bucle)
     connect(musicaFondo2, &QMediaPlayer::mediaStatusChanged,
             this, [this](QMediaPlayer::MediaStatus status){
                 if (status == QMediaPlayer::EndOfMedia) {
@@ -68,25 +71,9 @@ EscenaJuego::EscenaJuego(QObject *parent)
                 }
             });
 
-    // Empezar reproduciendo la primera canción
+    // Empezar con la canción 1
     musicaFondo1->play();
 
-
-
-    connect(sonidoDisparo, &QMediaPlayer::errorOccurred,
-            this, [](QMediaPlayer::Error e){
-                qDebug() << "Error sonidoDisparo:" << e;
-            });
-
-    connect(sonidoRebote, &QMediaPlayer::errorOccurred,
-            this, [](QMediaPlayer::Error e){
-                qDebug() << "Error sonidoRebote:" << e;
-            });
-
-    connect(sonidoDestruccion, &QMediaPlayer::errorOccurred,
-            this, [](QMediaPlayer::Error e){
-                qDebug() << "Error sonidoDestruccion:" << e;
-            });
 
     m_temporizador.setInterval(16);
     connect(&m_temporizador, &QTimer::timeout,
@@ -105,11 +92,11 @@ void EscenaJuego::configurarMundo()
     double yBase = m_alto - 20;
     double anchoColumna = 60;
     double altoColumna = 200;
-    double separacion = 45;
+    double separacion = 110;
     double altoTecho = 60;
 
     // Un poco más adentro de la pared izquierda
-    double xBaseIzq = 200;
+    double xBaseIzq = 110;
 
     // ----------- LADO IZQUIERDO (bloques) -----------
     BloqueEstructura *izqCol1 = new BloqueEstructura(
@@ -124,7 +111,7 @@ void EscenaJuego::configurarMundo()
     double yTecho = yBase - altoColumna - altoTecho;
     BloqueEstructura *izqTecho = new BloqueEstructura(
         QRectF(xBaseIzq, yTecho,
-               2*anchoColumna + separacion, altoTecho), 100);
+               2*anchoColumna + separacion, altoTecho), 150);
     addItem(izqTecho);
     m_bloquesIzquierda << izqTecho;
 
@@ -142,7 +129,7 @@ void EscenaJuego::configurarMundo()
 
     BloqueEstructura *derTecho = new BloqueEstructura(
         QRectF(xBaseDer, yTecho,
-               2*anchoColumna + separacion, altoTecho), 100);
+               2*anchoColumna + separacion, altoTecho), 150);
     addItem(derTecho);
     m_bloquesDerecha << derTecho;
 
@@ -443,35 +430,146 @@ void EscenaJuego::resolverChoquesBloques()
 // Comprueba si el proyectil golpea al rival y decide la victoria.
 void EscenaJuego::comprobarGolpeRival()
 {
-    auto todosDestruidos = [](const QVector<BloqueEstructura*> &lista){
-        for (auto *b : lista)
-            if (b && !b->destruido()) return false;
-        return true;
-    };
+    // Si ya hubo ganador, ignoramos nuevos impactos
+    if (m_hayGanador)
+        return;
 
-    if (!m_proyectil.activo) return;
+    if (!m_proyectil.activo)
+        return;
 
-    if (m_turno == Izquierda) {
-        if (!todosDestruidos(m_bloquesDerecha)) return;
+    // Rectángulos de los dos jugadores
+    QRectF rectIzquierda = m_rivalIzquierda->sceneBoundingRect();
+    QRectF rectDerecha   = m_rivalDerecha->sceneBoundingRect();
 
-        if (circuloIntersecaRect(m_proyectil.posicion, m_proyectil.radio,
-                                 m_rivalDerecha->sceneBoundingRect())){
-            m_proyectil.activo = false;
-            if (m_itemProyectil) m_itemProyectil->setVisible(false);
-            emit partidaTerminada(Izquierda);
-            m_temporizador.stop();
-        }
-    } else {
-        if (!todosDestruidos(m_bloquesIzquierda)) return;
+    bool impactoIzquierda = circuloIntersecaRect(
+        m_proyectil.posicion,
+        m_proyectil.radio,
+        rectIzquierda);
 
-        if (circuloIntersecaRect(m_proyectil.posicion, m_proyectil.radio,
-                                 m_rivalIzquierda->sceneBoundingRect())){
-            m_proyectil.activo = false;
-            if (m_itemProyectil) m_itemProyectil->setVisible(false);
-            emit partidaTerminada(Derecha);
-            m_temporizador.stop();
-        }
+    bool impactoDerecha = circuloIntersecaRect(
+        m_proyectil.posicion,
+        m_proyectil.radio,
+        rectDerecha);
+
+    if (!impactoIzquierda && !impactoDerecha)
+        return;
+
+    // Sonido de destrucción (opcional, además del winning)
+    if (sonidoDestruccion) {
+        sonidoDestruccion->stop();
+        sonidoDestruccion->play();
     }
+
+    // Determinar ganador según a quién golpeó y de quién era el turno
+    Bando ganador;
+
+    if (impactoIzquierda && impactoDerecha) {
+        // Caso muy raro: le pega a los dos, damos la victoria al rival del turno
+        ganador = (m_turno == Izquierda) ? Derecha : Izquierda;
+    }
+    else if (impactoIzquierda) {
+        // Golpea al jugador de la izquierda
+        // Si el turno era Izquierda, se auto-disparó → gana Derecha
+        // Si el turno era Derecha, le dio al enemigo → gana Derecha
+        ganador = Derecha;
+    }
+    else { // impactoDerecha
+        // Golpea al jugador de la derecha
+        // Si el turno era Derecha, se auto-disparó → gana Izquierda
+        // Si el turno era Izquierda, le dio al enemigo → gana Izquierda
+        ganador = Izquierda;
+    }
+
+    // Desactivar proyectil y parar la simulación
+    m_proyectil.activo = false;
+    if (m_itemProyectil)
+        m_itemProyectil->setVisible(false);
+    m_temporizador.stop();
+
+    // Marcar que ya hay ganador
+    m_hayGanador = true;
+
+    // --- Parar música de fondo ---
+    if (musicaFondo1) musicaFondo1->stop();
+    if (musicaFondo2) musicaFondo2->stop();
+
+    // --- Reproducir sonido de victoria ---
+    if (sonidoVictoria) {
+        sonidoVictoria->stop();
+        sonidoVictoria->play();
+    }
+
+    // --- Mostrar texto en el centro de la escena ---
+    QString texto;
+
+    if (ganador == Izquierda)
+        texto = tr("¡Gana el jugador de la izquierda!");
+    else
+        texto = tr("¡Gana el jugador de la derecha!");
+
+    texto += "\n\n";
+    texto += tr("Presionar R para jugar de nuevo");
+
+    // Crear o actualizar el texto
+    if (!m_textoFin) {
+        QFont fuente;
+        fuente.setPointSize(16);
+        fuente.setBold(true);
+        m_textoFin = addText(texto, fuente);
+    } else {
+        m_textoFin->setPlainText(texto);
+    }
+
+    m_textoFin->setDefaultTextColor(Qt::black);
+
+    // Centrar el texto en la escena
+    QRectF sr = sceneRect();
+    QRectF br = m_textoFin->boundingRect();
+    m_textoFin->setPos(sr.center().x() - br.width() / 2.0,
+                       sr.center().y() - br.height() / 2.0);
+
+    // Emitir señal por si la ventana principal quiere saberlo (aunque ya no use QMessageBox)
+    emit partidaTerminada(ganador);
+}
+
+void EscenaJuego::reiniciarJuego()
+{
+    // Detener cualquier cosa que siga sonando
+    if (musicaFondo1) musicaFondo1->stop();
+    if (musicaFondo2) musicaFondo2->stop();
+    if (sonidoVictoria) sonidoVictoria->stop();
+
+    m_temporizador.stop();
+    m_proyectil.activo = false;
+
+    // Limpiar todos los items gráficos
+    clear();
+
+    // Resetear listas y punteros relacionados con la escena
+    m_bloquesIzquierda.clear();
+    m_bloquesDerecha.clear();
+    m_itemProyectil = nullptr;
+    m_rivalIzquierda = nullptr;
+    m_rivalDerecha   = nullptr;
+
+    m_textoFin = nullptr;
+    m_hayGanador = false;
+
+    // Volver al turno inicial
+    m_turno = Izquierda;
+
+    // Volver a montar el mundo
+    configurarMundo();
+
+    // Volver a arrancar la música de fondo desde la canción 1
+    if (musicaFondo1 && musicaFondo2) {
+        musicaFondo1->stop();
+        musicaFondo2->stop();
+        musicaFondo1->play();
+    }
+
+    // Notificar a la ventana que el turno actual cambió
+    emit turnoCambiado(m_turno);
 }
 
 // Destruye el proyectil actual y alterna el turno
@@ -484,3 +582,5 @@ void EscenaJuego::finalizarTurno()
     m_turno = (m_turno == Izquierda) ? Derecha : Izquierda;
     emit turnoCambiado(m_turno);
 }
+
+

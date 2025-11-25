@@ -19,6 +19,9 @@ private slots:
     void actualizarEtiquetaTurno(EscenaJuego::Bando bando);
     void mostrarGanador(EscenaJuego::Bando ganador);
 
+protected:
+    // ---  para capturar la tecla R ---
+    void keyPressEvent(QKeyEvent *event) override;
 private:
     EscenaJuego    *m_escena;
     QGraphicsView  *m_vista;
