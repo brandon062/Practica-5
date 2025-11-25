@@ -5,7 +5,10 @@
 #include <QGraphicsPixmapItem>
 #include <QTransform>
 #include <algorithm>    // std::min, std::max
-#include <cmath>        // std::abs
+#include <cmath>        // std::
+#include <QSoundEffect>
+
+#include <QDebug>  // arriba del archivo
 
 EscenaJuego::EscenaJuego(QObject *parent)
     : QGraphicsScene(parent),
@@ -14,7 +17,77 @@ EscenaJuego::EscenaJuego(QObject *parent)
     setSceneRect(0, 0, m_ancho, m_alto);
     configurarMundo();
 
-    // Temporizador que avanza la simulación a ~60 FPS
+    // ------------------ SONIDOS ---------------------
+    // DISPARO
+    sonidoDisparo = new QMediaPlayer(this);
+    audioDisparo  = new QAudioOutput(this);
+    sonidoDisparo->setAudioOutput(audioDisparo);
+    audioDisparo->setVolume(0.8);
+    sonidoDisparo->setSource(QUrl("qrc:/new/sonidos/disparo_canon.mp3"));
+
+    // REBOTE
+    sonidoRebote = new QMediaPlayer(this);
+    audioRebote  = new QAudioOutput(this);
+    sonidoRebote->setAudioOutput(audioRebote);
+    audioRebote->setVolume(0.7);
+    sonidoRebote->setSource(QUrl("qrc:/new/sonidos/rebote.mp3"));
+
+    // DESTRUCCIÓN
+    sonidoDestruccion = new QMediaPlayer(this);
+    audioDestruccion  = new QAudioOutput(this);
+    sonidoDestruccion->setAudioOutput(audioDestruccion);
+    audioDestruccion->setVolume(0.8);
+    sonidoDestruccion->setSource(QUrl("qrc:/new/sonidos/destruccion.mp3"));
+
+    // ------------------ MÚSICA DE FONDO ---------------------
+    musicaFondo1 = new QMediaPlayer(this);
+    audioMusica1 = new QAudioOutput(this);
+    musicaFondo1->setAudioOutput(audioMusica1);
+    audioMusica1->setVolume(0.08);  // volumen música 1
+    musicaFondo1->setSource(QUrl("qrc:/new/sonidos/cancion1.mp3"));
+
+    musicaFondo2 = new QMediaPlayer(this);
+    audioMusica2 = new QAudioOutput(this);
+    musicaFondo2->setAudioOutput(audioMusica2);
+    audioMusica2->setVolume(0.08);  // volumen música 2
+    musicaFondo2->setSource(QUrl("qrc:/new/sonidos/cancion2.mp3"));
+
+    // Cuando termine la canción 1, reproducir la 2
+    connect(musicaFondo1, &QMediaPlayer::mediaStatusChanged,
+            this, [this](QMediaPlayer::MediaStatus status){
+                if (status == QMediaPlayer::EndOfMedia) {
+                    musicaFondo2->play();
+                }
+            });
+
+    // Cuando termine la canción 2, volver a la 1 (bucle)
+    connect(musicaFondo2, &QMediaPlayer::mediaStatusChanged,
+            this, [this](QMediaPlayer::MediaStatus status){
+                if (status == QMediaPlayer::EndOfMedia) {
+                    musicaFondo1->play();
+                }
+            });
+
+    // Empezar reproduciendo la primera canción
+    musicaFondo1->play();
+
+
+
+    connect(sonidoDisparo, &QMediaPlayer::errorOccurred,
+            this, [](QMediaPlayer::Error e){
+                qDebug() << "Error sonidoDisparo:" << e;
+            });
+
+    connect(sonidoRebote, &QMediaPlayer::errorOccurred,
+            this, [](QMediaPlayer::Error e){
+                qDebug() << "Error sonidoRebote:" << e;
+            });
+
+    connect(sonidoDestruccion, &QMediaPlayer::errorOccurred,
+            this, [](QMediaPlayer::Error e){
+                qDebug() << "Error sonidoDestruccion:" << e;
+            });
+
     m_temporizador.setInterval(16);
     connect(&m_temporizador, &QTimer::timeout,
             this, &EscenaJuego::actualizarSimulacion);
@@ -23,7 +96,7 @@ EscenaJuego::EscenaJuego(QObject *parent)
 // Crea todos los elementos de la escena (bloques, rivales, cañones, etc.)
 void EscenaJuego::configurarMundo()
 {
-    // Fondo (cielo) y "suelo" verde
+    // Fondo (cielo) y suelo verde
     setBackgroundBrush(QBrush(QColor(220, 230, 255)));
     addRect(0, m_alto-20, m_ancho, 20,
             QPen(Qt::NoPen), QBrush(Qt::darkGreen));
@@ -107,12 +180,12 @@ void EscenaJuego::configurarMundo()
 
     // ----------- CAÑONES CENTRADOS EN LOS LATERALES (sprites) -----------
 
-    // Sprite base del cañón, escalado
+    // Sprite base del cañon, escalado
     QPixmap spriteCanon(":/new/images/canon.png");
     spriteCanon = spriteCanon.scaled(
         80, 70, Qt::KeepAspectRatio, Qt::SmoothTransformation);
 
-    // Versión espejada para el cañón izquierdo
+    // Versión espejada para el cañon izquierdo
     QPixmap spriteCanonIzq = spriteCanon.transformed(
         QTransform().scale(-1, 1));
 
@@ -130,7 +203,7 @@ void EscenaJuego::configurarMundo()
         altoPlataforma,
         QPen(Qt::black), QBrush(Qt::darkGray));
 
-    // Cañón izquierdo: usa sprite espejado (mira a la derecha)
+    // Cañon izquierdo: usa sprite espejado (mira a la derecha)
     m_canionIzquierda = addPixmap(spriteCanonIzq);
     m_canionIzquierda->setZValue(1);
 
@@ -148,7 +221,7 @@ void EscenaJuego::configurarMundo()
         altoPlataforma,
         QPen(Qt::black), QBrush(Qt::darkGray));
 
-    // Cañón derecho: sprite original (mira hacia la izquierda)
+    // Cañon derecho: sprite original (mira hacia la izquierda)
     m_canionDerecha = addPixmap(spriteCanon);
     m_canionDerecha->setZValue(1);
 
@@ -157,11 +230,17 @@ void EscenaJuego::configurarMundo()
                             yCanon);
 }
 
-// Lógica para iniciar un disparo desde el bando que tenga el turno.
+// Logica para iniciar un disparo desde el bando que tenga el turno.
 void EscenaJuego::dispararProyectil(double anguloGrados, double velocidad)
 {
     if (m_proyectil.activo) return; // aún hay un proyectil en vuelo
+
     reiniciarProyectil(m_turno, anguloGrados, velocidad);
+
+    // Sonido de disparo de cañon
+    sonidoDisparo->stop();
+    sonidoDisparo->play();
+
     m_temporizador.start();
 }
 
@@ -179,7 +258,7 @@ void EscenaJuego::reiniciarProyectil(Bando bando,
     double rad = qDegreesToRadians(anguloGrados);
 
     if (bando == Izquierda) {
-        // Centro del cañón izquierdo
+        // Centro del cañon izquierdo
         QRectF r = m_canionIzquierda->boundingRect();
         QPointF centro = m_canionIzquierda->mapToScene(r.center());
         m_proyectil.posicion = Vector2D(centro.x(), centro.y());
@@ -188,7 +267,7 @@ void EscenaJuego::reiniciarProyectil(Bando bando,
         m_proyectil.velocidad.x =  velocidad * qCos(rad);
         m_proyectil.velocidad.y = -velocidad * qSin(rad);
     } else {
-        // Centro del cañón derecho
+        // Centro del cañon derecho
         QRectF r = m_canionDerecha->boundingRect();
         QPointF centro = m_canionDerecha->mapToScene(r.center());
         m_proyectil.posicion = Vector2D(centro.x(), centro.y());
@@ -236,7 +315,7 @@ void EscenaJuego::actualizarSimulacion()
     }
 }
 
-// Integración explícita muy simple (Euler).
+// Integración explicita muy simple (Euler).
 void EscenaJuego::integrar(double dt)
 {
     // Aceleración: solo gravedad hacia abajo.
@@ -248,7 +327,7 @@ void EscenaJuego::integrar(double dt)
                                 m_proyectil.posicion.y - m_proyectil.radio);
 }
 
-// Colisiones elásticas con las paredes de la escena (caja).
+// Colisiones elasticas con las paredes de la escena (caja).
 void EscenaJuego::resolverChoquesParedes()
 {
     bool rebote = false;
@@ -277,9 +356,15 @@ void EscenaJuego::resolverChoquesParedes()
     if (rebote && m_itemProyectil)
         m_itemProyectil->setPos(m_proyectil.posicion.x - m_proyectil.radio,
                                 m_proyectil.posicion.y - m_proyectil.radio);
+
+    // Si hubo rebote contra alguna pared, reproducimos sonido de rebote
+    if (rebote) {
+        sonidoRebote->stop();
+        sonidoRebote->play();
+    }
 }
 
-// Chequeo geométrico: ¿un círculo intersecta un rectángulo?
+// Chequeo geometrico: ¿un circulo intersecta un rectangulo?
 bool EscenaJuego::circuloIntersecaRect(const Vector2D &c, double r,
                                        const QRectF &rect) const
 {
@@ -289,7 +374,7 @@ bool EscenaJuego::circuloIntersecaRect(const Vector2D &c, double r,
     return magnitud2(d) <= r*r;
 }
 
-// Colisiones inelásticas contra los bloques de la infraestructura.
+// Colisiones inelasticas contra los bloques de la infraestructura.
 void EscenaJuego::resolverChoquesBloques()
 {
     auto procesarLista = [&](QVector<BloqueEstructura*> &lista){
@@ -301,7 +386,7 @@ void EscenaJuego::resolverChoquesBloques()
                                       m_proyectil.radio, r))
                 continue;
 
-            // Aproximamos la normal de choque eligiendo la cara más cercana.
+            // Aproximamos la normal de choque eligiendo la cara mas cercana.
             double distIzq  = std::abs((m_proyectil.posicion.x + m_proyectil.radio) - r.left());
             double distDer  = std::abs((m_proyectil.posicion.x - m_proyectil.radio) - r.right());
             double distSup  = std::abs((m_proyectil.posicion.y + m_proyectil.radio) - r.top());
@@ -324,7 +409,7 @@ void EscenaJuego::resolverChoquesBloques()
             Vector2D vPerp = n * vN;
             Vector2D vPar  = m_proyectil.velocidad - vPerp;
 
-            // Rebote inelástico (se pierde energía en la normal).
+            // Rebote inelastico (se pierde energia en la normal).
             Vector2D vPerpNueva = n * (-m_coefRestEstructura * vN);
             m_proyectil.velocidad = vPar + vPerpNueva;
 
@@ -335,7 +420,19 @@ void EscenaJuego::resolverChoquesBloques()
             // Daño proporcional al momento (masa * |velocidad|)
             double vel = magnitud(m_proyectil.velocidad);
             double danio = m_factorDanio * m_proyectil.masa * vel;
-            b->aplicarDanio(danio);
+
+            // aplicarDanio devuelve true si el bloque se destruye con este golpe
+            bool seDestruyo = b->aplicarDanio(danio);
+
+            // Solo un sonido: si se destruye el bloque, usamos destrucción;
+            // en caso contrario, solo el rebote.
+            if (seDestruyo) {
+                sonidoDestruccion->stop();
+                sonidoDestruccion->play();
+            } else {
+                sonidoRebote->stop();
+                sonidoRebote->play();
+            }
         }
     };
 
@@ -377,7 +474,7 @@ void EscenaJuego::comprobarGolpeRival()
     }
 }
 
-// Destruye el proyectil actual y alterna el turno.
+// Destruye el proyectil actual y alterna el turno
 void EscenaJuego::finalizarTurno()
 {
     m_proyectil.activo = false;
