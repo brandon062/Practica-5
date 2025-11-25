@@ -1,0 +1,15 @@
+<RCC>
+    <qresource prefix="/new/images">
+        <file>canon.png</file>
+        <file>personaje1.png</file>
+        <file>personaje2.png</file>
+    </qresource>
+    <qresource prefix="/new/sonidos">
+        <file>destruccion.mp3</file>
+        <file>rebote.mp3</file>
+        <file>disparo_canon.mp3</file>
+        <file>cancion1.mp3</file>
+        <file>cancion2.mp3</file>
+        <file>winning.mp3</file>
+    </qresource>
+</RCC>

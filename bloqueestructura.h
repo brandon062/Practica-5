@@ -5,12 +5,12 @@
 #include <QGraphicsSimpleTextItem>
 #include <QBrush>
 #include <QPen>
-#include <algorithm>    // std::max, std::min
+#include <algorithm>
 
 // BloqueEstructura:
 //  - Representa un bloque "100" o "200" del edificio.
-//  - Tiene una resistencia (vida) y se puede "dañar".
-//  - Muestra la vida actual en un texto encima del bloque.
+//  - Tiene una resistencia (vida) y se puede dañar.
+//  - Muestra la vida actual como texto encima.
 class BloqueEstructura : public QGraphicsRectItem
 {
 public:
@@ -23,7 +23,7 @@ public:
         setBrush(QBrush(Qt::lightGray));
         setPen(QPen(Qt::black));
 
-        // Creamos un texto hijo que muestra la vida del bloque.
+        // Texto hijo que muestra la vida del bloque.
         m_etiquetaVida = new QGraphicsSimpleTextItem(this);
         actualizarTextoVida();
     }
@@ -31,19 +31,20 @@ public:
     bool destruido() const { return m_destruido; }
     double resistencia() const { return m_resistencia; }
 
-    // Resta vida al bloque en función del daño recibido.
-    // Cambia color según la vida y actualiza el texto.
-    void aplicarDanio(double danio){
-        if (m_destruido) return;
+    // Aplica daño al bloque y devuelve true si se destruye con este golpe.
+    bool aplicarDanio(double danio){
+        if (m_destruido) return false;
 
+        double resistenciaAnterior = m_resistencia;
         m_resistencia -= danio;
+
         if (m_resistencia <= 0.0){
             m_resistencia = 0.0;
             m_destruido = true;
             setBrush(QBrush(Qt::darkGray));
             setOpacity(0.3);   // se ve "roto"
         } else {
-            // Color según porcentaje de vida (simplemente cosmético).
+            // Color según porcentaje de vida
             double ratio = std::max(0.0, std::min(1.0, m_resistencia / 200.0));
             int tono = 30 + int(120 * ratio);
             QColor c = QColor::fromHsv(tono, 255, 220);
@@ -51,6 +52,8 @@ public:
         }
 
         actualizarTextoVida();
+
+        return (!m_destruido) ? false : (resistenciaAnterior > 0.0);
     }
 
 private:
@@ -60,8 +63,7 @@ private:
 
         m_etiquetaVida->setText(QString::number(int(m_resistencia)));
 
-        // Centramos el texto respecto al rectángulo local del bloque.
-        QRectF r = rect();  // coordenadas locales
+        QRectF r = rect();
         QRectF textoBBox = m_etiquetaVida->boundingRect();
 
         qreal x = r.left() + (r.width()  - textoBBox.width())  / 2.0;
@@ -76,3 +78,4 @@ private:
 };
 
 #endif // BLOQUEESTRUCTURA_H
+

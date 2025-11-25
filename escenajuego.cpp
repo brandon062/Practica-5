@@ -2,8 +2,11 @@
 #include <QtMath>
 #include <QGraphicsEllipseItem>
 #include <QGraphicsRectItem>
+#include <QGraphicsPixmapItem>
+#include <QTransform>
 #include <algorithm>    // std::min, std::max
-#include <cmath>        // std::abs
+#include <cmath>        // std::
+#include <QSoundEffect>
 
 EscenaJuego::EscenaJuego(QObject *parent)
     : QGraphicsScene(parent),
@@ -12,7 +15,66 @@ EscenaJuego::EscenaJuego(QObject *parent)
     setSceneRect(0, 0, m_ancho, m_alto);
     configurarMundo();
 
-    // Temporizador que avanza la simulación a ~60 FPS
+    // ------------------ SONIDOS ---------------------
+    // DISPARO
+    sonidoDisparo = new QMediaPlayer(this);
+    audioDisparo  = new QAudioOutput(this);
+    sonidoDisparo->setAudioOutput(audioDisparo);
+    audioDisparo->setVolume(0.8);
+    sonidoDisparo->setSource(QUrl("qrc:/new/sonidos/disparo_canon.mp3"));
+
+    // REBOTE
+    sonidoRebote = new QMediaPlayer(this);
+    audioRebote  = new QAudioOutput(this);
+    sonidoRebote->setAudioOutput(audioRebote);
+    audioRebote->setVolume(0.7);
+    sonidoRebote->setSource(QUrl("qrc:/new/sonidos/rebote.mp3"));
+
+    // DESTRUCCIÓN
+    sonidoDestruccion = new QMediaPlayer(this);
+    audioDestruccion  = new QAudioOutput(this);
+    sonidoDestruccion->setAudioOutput(audioDestruccion);
+    audioDestruccion->setVolume(0.8);
+    sonidoDestruccion->setSource(QUrl("qrc:/new/sonidos/destruccion.mp3"));
+
+    // SONIDO DE VICTORIA
+    sonidoVictoria = new QMediaPlayer(this);
+    audioVictoria  = new QAudioOutput(this);
+    sonidoVictoria->setAudioOutput(audioVictoria);
+    audioVictoria->setVolume(0.8);
+    sonidoVictoria->setSource(QUrl("qrc:/new/sonidos/winning.mp3"));
+
+    // ------------------ MÚSICA DE FONDO ---------------------
+    musicaFondo1 = new QMediaPlayer(this);
+    audioMusica1 = new QAudioOutput(this);
+    musicaFondo1->setAudioOutput(audioMusica1);
+    audioMusica1->setVolume(0.08);
+    musicaFondo1->setSource(QUrl("qrc:/new/sonidos/cancion1.mp3"));
+
+    musicaFondo2 = new QMediaPlayer(this);
+    audioMusica2 = new QAudioOutput(this);
+    musicaFondo2->setAudioOutput(audioMusica2);
+    audioMusica2->setVolume(0.08);
+    musicaFondo2->setSource(QUrl("qrc:/new/sonidos/cancion2.mp3"));
+
+    connect(musicaFondo1, &QMediaPlayer::mediaStatusChanged,
+            this, [this](QMediaPlayer::MediaStatus status){
+                if (status == QMediaPlayer::EndOfMedia) {
+                    musicaFondo2->play();
+                }
+            });
+
+    connect(musicaFondo2, &QMediaPlayer::mediaStatusChanged,
+            this, [this](QMediaPlayer::MediaStatus status){
+                if (status == QMediaPlayer::EndOfMedia) {
+                    musicaFondo1->play();
+                }
+            });
+
+    // Empezar con la canción 1
+    musicaFondo1->play();
+
+
     m_temporizador.setInterval(16);
     connect(&m_temporizador, &QTimer::timeout,
             this, &EscenaJuego::actualizarSimulacion);
@@ -21,7 +83,7 @@ EscenaJuego::EscenaJuego(QObject *parent)
 // Crea todos los elementos de la escena (bloques, rivales, cañones, etc.)
 void EscenaJuego::configurarMundo()
 {
-    // Fondo (cielo) y "suelo" verde
+    // Fondo (cielo) y suelo verde
     setBackgroundBrush(QBrush(QColor(220, 230, 255)));
     addRect(0, m_alto-20, m_ancho, 20,
             QPen(Qt::NoPen), QBrush(Qt::darkGreen));
@@ -30,11 +92,13 @@ void EscenaJuego::configurarMundo()
     double yBase = m_alto - 20;
     double anchoColumna = 60;
     double altoColumna = 200;
-    double separacion = 20;
+    double separacion = 110;
     double altoTecho = 60;
-    double xBaseIzq = 150;
 
-    // ----------- LADO IZQUIERDO (bloques + rival) -----------
+    // Un poco más adentro de la pared izquierda
+    double xBaseIzq = 110;
+
+    // ----------- LADO IZQUIERDO (bloques) -----------
     BloqueEstructura *izqCol1 = new BloqueEstructura(
         QRectF(xBaseIzq, yBase - altoColumna,
                anchoColumna, altoColumna), 200);
@@ -47,17 +111,11 @@ void EscenaJuego::configurarMundo()
     double yTecho = yBase - altoColumna - altoTecho;
     BloqueEstructura *izqTecho = new BloqueEstructura(
         QRectF(xBaseIzq, yTecho,
-               2*anchoColumna + separacion, altoTecho), 100);
+               2*anchoColumna + separacion, altoTecho), 150);
     addItem(izqTecho);
     m_bloquesIzquierda << izqTecho;
 
-    // "Rival" izquierdo detrás de la estructura
-    m_rivalIzquierda = addRect(
-        xBaseIzq + anchoColumna*0.5, yBase - altoColumna + 20,
-        anchoColumna, altoColumna - 40,
-        QPen(Qt::black), QBrush(QColor(255,230,200)));
-
-    // ----------- LADO DERECHO (bloques + rival) -----------
+    // ----------- LADO DERECHO (bloques) -----------
     double xBaseDer = m_ancho - xBaseIzq - 2*anchoColumna - separacion;
 
     BloqueEstructura *derCol1 = new BloqueEstructura(
@@ -71,54 +129,110 @@ void EscenaJuego::configurarMundo()
 
     BloqueEstructura *derTecho = new BloqueEstructura(
         QRectF(xBaseDer, yTecho,
-               2*anchoColumna + separacion, altoTecho), 100);
+               2*anchoColumna + separacion, altoTecho), 150);
     addItem(derTecho);
     m_bloquesDerecha << derTecho;
 
-    m_rivalDerecha = addRect(
-        xBaseDer + anchoColumna*0.5, yBase - altoColumna + 20,
-        anchoColumna, altoColumna - 40,
-        QPen(Qt::black), QBrush(QColor(255,230,200)));
+    // ----------- SPRITES DE PERSONAJES -----------
 
-    // ----------- CAÑONES CENTRADOS EN LOS LATERALES -----------
+    // Cargamos sprites y se les ajusta el tamaño
+    QPixmap spritePersonaje1(":/new/images/personaje1.png");
+    spritePersonaje1 = spritePersonaje1.scaled(
+        100, 100, Qt::KeepAspectRatio, Qt::SmoothTransformation);
 
-    // Altura media de la escena
+    QPixmap spritePersonaje2(":/new/images/personaje2.png");
+    spritePersonaje2 = spritePersonaje2.scaled(
+        100, 100, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+
+    // Personaje izquierdo = personaje1.png
+    m_rivalIzquierda = addPixmap(spritePersonaje1);
+    m_rivalIzquierda->setZValue(1);  // delante de bloques
+
+    // Se coloca centrado ENTRE las dos columnas
+    double anchoEstructura = 2*anchoColumna + separacion;
+    double xCentroEstrIzq = xBaseIzq + anchoEstructura / 2.0;
+    double yPersonaje = yBase - spritePersonaje1.height() - 10;
+
+    m_rivalIzquierda->setPos(xCentroEstrIzq - spritePersonaje1.width()/2.0,
+                             yPersonaje);
+
+    // Personaje derecho = personaje2.png, también centrado en su estructura
+    m_rivalDerecha = addPixmap(spritePersonaje2);
+    m_rivalDerecha->setZValue(1);
+
+    double xCentroEstrDer = xBaseDer + anchoEstructura / 2.0;
+
+    m_rivalDerecha->setPos(xCentroEstrDer - spritePersonaje2.width()/2.0,
+                           yPersonaje);
+
+    // ----------- CAÑONES CENTRADOS EN LOS LATERALES (sprites) -----------
+
+    // Sprite base del cañon, escalado
+    QPixmap spriteCanon(":/new/images/canon.png");
+    spriteCanon = spriteCanon.scaled(
+        80, 70, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+
+    // Versión espejada para el cañon izquierdo
+    QPixmap spriteCanonIzq = spriteCanon.transformed(
+        QTransform().scale(-1, 1));
+
     double yCentro = m_alto / 2.0;
 
-    // Plataforma izquierda (no recibe daño, solo decorativa)
+    double anchoPlataforma = 80;
+    double altoPlataforma  = 10;
+    double xPlataformaMargen = 10;   // separación de la pared
+
+    // Plataforma izquierda (no recibe daño)
     m_plataformaIzquierda = addRect(
-        20, yCentro + 10,      // posición
-        70, 10,                // ancho/alto
+        xPlataformaMargen,
+        yCentro + 10,
+        anchoPlataforma,
+        altoPlataforma,
         QPen(Qt::black), QBrush(Qt::darkGray));
 
-    // Cañón izquierdo encima de la plataforma
-    m_canionIzquierda = addRect(
-        30, yCentro - 10,      // posición
-        40, 20,                // ancho/alto
-        QPen(Qt::black), QBrush(Qt::blue));
+    // Cañon izquierdo: usa sprite espejado (mira a la derecha)
+    m_canionIzquierda = addPixmap(spriteCanonIzq);
+    m_canionIzquierda->setZValue(1);
+
+    double xCanonIzq = xPlataformaMargen + anchoPlataforma/2.0;
+    double yCanon    = yCentro - spriteCanonIzq.height()/2.0;
+
+    m_canionIzquierda->setPos(xCanonIzq - spriteCanonIzq.width()/2.0,
+                              yCanon);
 
     // Plataforma derecha
     m_plataformaDerecha = addRect(
-        m_ancho - 90, yCentro + 10,
-        70, 10,
+        m_ancho - xPlataformaMargen - anchoPlataforma,
+        yCentro + 10,
+        anchoPlataforma,
+        altoPlataforma,
         QPen(Qt::black), QBrush(Qt::darkGray));
 
-    // Cañón derecho encima de la plataforma
-    m_canionDerecha = addRect(
-        m_ancho - 70, yCentro - 10,
-        40, 20,
-        QPen(Qt::black), QBrush(Qt::blue));
+    // Cañon derecho: sprite original (mira hacia la izquierda)
+    m_canionDerecha = addPixmap(spriteCanon);
+    m_canionDerecha->setZValue(1);
+
+    double xCanonDer = m_ancho - xPlataformaMargen - anchoPlataforma/2.0;
+    m_canionDerecha->setPos(xCanonDer - spriteCanon.width()/2.0,
+                            yCanon);
 }
 
-// Lógica para iniciar un disparo desde el bando que tenga el turno.
+// Logica para iniciar un disparo desde el bando que tenga el turno.
 void EscenaJuego::dispararProyectil(double anguloGrados, double velocidad)
 {
     if (m_proyectil.activo) return; // aún hay un proyectil en vuelo
+
     reiniciarProyectil(m_turno, anguloGrados, velocidad);
+
+    // Sonido de disparo de cañon
+    sonidoDisparo->stop();
+    sonidoDisparo->play();
+
     m_temporizador.start();
 }
 
 // Posiciona y configura el proyectil según el bando (izquierda/derecha).
+
 void EscenaJuego::reiniciarProyectil(Bando bando,
                                      double anguloGrados,
                                      double velocidad)
@@ -131,22 +245,25 @@ void EscenaJuego::reiniciarProyectil(Bando bando,
     double rad = qDegreesToRadians(anguloGrados);
 
     if (bando == Izquierda) {
-        // Punto de salida: centro del cañón izquierdo
-        QRectF r = m_canionIzquierda->rect();
-        QPointF centro = r.center() + m_canionIzquierda->pos();
+        // Centro del cañon izquierdo
+        QRectF r = m_canionIzquierda->boundingRect();
+        QPointF centro = m_canionIzquierda->mapToScene(r.center());
         m_proyectil.posicion = Vector2D(centro.x(), centro.y());
+
+        // Disparo hacia la derecha
         m_proyectil.velocidad.x =  velocidad * qCos(rad);
         m_proyectil.velocidad.y = -velocidad * qSin(rad);
     } else {
-        // Punto de salida: centro del cañón derecho
-        QRectF r = m_canionDerecha->rect();
-        QPointF centro = r.center() + m_canionDerecha->pos();
+        // Centro del cañon derecho
+        QRectF r = m_canionDerecha->boundingRect();
+        QPointF centro = m_canionDerecha->mapToScene(r.center());
         m_proyectil.posicion = Vector2D(centro.x(), centro.y());
+
+        // Disparo hacia la izquierda
         m_proyectil.velocidad.x = -velocidad * qCos(rad);
         m_proyectil.velocidad.y = -velocidad * qSin(rad);
     }
 
-    // Si el ítem gráfico del proyectil no existe, lo creamos.
     if (!m_itemProyectil) {
         m_itemProyectil = addEllipse(
             0, 0,
@@ -175,7 +292,7 @@ void EscenaJuego::actualizarSimulacion()
     m_proyectil.tiempoVida += dt;
     double vel = magnitud(m_proyectil.velocidad);
 
-    // Condiciones para "matar" el proyectil y pasar turno.
+    // Condiciones para eliminar el proyectil y pasar turno.
     if (m_proyectil.posicion.y - m_proyectil.radio > m_alto + 50 ||
         m_proyectil.posicion.x + m_proyectil.radio < -50 ||
         m_proyectil.posicion.x - m_proyectil.radio > m_ancho + 50 ||
@@ -185,7 +302,7 @@ void EscenaJuego::actualizarSimulacion()
     }
 }
 
-// Integración explícita muy simple (Euler).
+// Integración explicita muy simple (Euler).
 void EscenaJuego::integrar(double dt)
 {
     // Aceleración: solo gravedad hacia abajo.
@@ -197,7 +314,7 @@ void EscenaJuego::integrar(double dt)
                                 m_proyectil.posicion.y - m_proyectil.radio);
 }
 
-// Colisiones elásticas con las paredes de la escena (caja).
+// Colisiones elasticas con las paredes de la escena (caja).
 void EscenaJuego::resolverChoquesParedes()
 {
     bool rebote = false;
@@ -226,9 +343,15 @@ void EscenaJuego::resolverChoquesParedes()
     if (rebote && m_itemProyectil)
         m_itemProyectil->setPos(m_proyectil.posicion.x - m_proyectil.radio,
                                 m_proyectil.posicion.y - m_proyectil.radio);
+
+    // Si hubo rebote contra alguna pared, reproducimos sonido de rebote
+    if (rebote) {
+        sonidoRebote->stop();
+        sonidoRebote->play();
+    }
 }
 
-// Chequeo geométrico: ¿un círculo intersecta un rectángulo?
+// Chequeo geometrico: ¿un circulo intersecta un rectangulo?
 bool EscenaJuego::circuloIntersecaRect(const Vector2D &c, double r,
                                        const QRectF &rect) const
 {
@@ -238,7 +361,7 @@ bool EscenaJuego::circuloIntersecaRect(const Vector2D &c, double r,
     return magnitud2(d) <= r*r;
 }
 
-// Colisiones inelásticas contra los bloques de la infraestructura.
+// Colisiones inelasticas contra los bloques de la infraestructura.
 void EscenaJuego::resolverChoquesBloques()
 {
     auto procesarLista = [&](QVector<BloqueEstructura*> &lista){
@@ -250,7 +373,7 @@ void EscenaJuego::resolverChoquesBloques()
                                       m_proyectil.radio, r))
                 continue;
 
-            // Aproximamos la normal de choque eligiendo la cara más cercana.
+            // Aproximamos la normal de choque eligiendo la cara mas cercana.
             double distIzq  = std::abs((m_proyectil.posicion.x + m_proyectil.radio) - r.left());
             double distDer  = std::abs((m_proyectil.posicion.x - m_proyectil.radio) - r.right());
             double distSup  = std::abs((m_proyectil.posicion.y + m_proyectil.radio) - r.top());
@@ -273,7 +396,7 @@ void EscenaJuego::resolverChoquesBloques()
             Vector2D vPerp = n * vN;
             Vector2D vPar  = m_proyectil.velocidad - vPerp;
 
-            // Rebote inelástico (se pierde energía en la normal).
+            // Rebote inelastico (se pierde energia en la normal).
             Vector2D vPerpNueva = n * (-m_coefRestEstructura * vN);
             m_proyectil.velocidad = vPar + vPerpNueva;
 
@@ -284,7 +407,19 @@ void EscenaJuego::resolverChoquesBloques()
             // Daño proporcional al momento (masa * |velocidad|)
             double vel = magnitud(m_proyectil.velocidad);
             double danio = m_factorDanio * m_proyectil.masa * vel;
-            b->aplicarDanio(danio);
+
+            // aplicarDanio devuelve true si el bloque se destruye con este golpe
+            bool seDestruyo = b->aplicarDanio(danio);
+
+            // Solo un sonido: si se destruye el bloque, usamos destrucción;
+            // en caso contrario, solo el rebote.
+            if (seDestruyo) {
+                sonidoDestruccion->stop();
+                sonidoDestruccion->play();
+            } else {
+                sonidoRebote->stop();
+                sonidoRebote->play();
+            }
         }
     };
 
@@ -295,38 +430,149 @@ void EscenaJuego::resolverChoquesBloques()
 // Comprueba si el proyectil golpea al rival y decide la victoria.
 void EscenaJuego::comprobarGolpeRival()
 {
-    auto todosDestruidos = [](const QVector<BloqueEstructura*> &lista){
-        for (auto *b : lista)
-            if (b && !b->destruido()) return false;
-        return true;
-    };
+    // Si ya hubo ganador, ignoramos nuevos impactos
+    if (m_hayGanador)
+        return;
 
-    if (!m_proyectil.activo) return;
+    if (!m_proyectil.activo)
+        return;
 
-    if (m_turno == Izquierda) {
-        if (!todosDestruidos(m_bloquesDerecha)) return;
+    // Rectángulos de los dos jugadores
+    QRectF rectIzquierda = m_rivalIzquierda->sceneBoundingRect();
+    QRectF rectDerecha   = m_rivalDerecha->sceneBoundingRect();
 
-        if (circuloIntersecaRect(m_proyectil.posicion, m_proyectil.radio,
-                                 m_rivalDerecha->sceneBoundingRect())){
-            m_proyectil.activo = false;
-            if (m_itemProyectil) m_itemProyectil->setVisible(false);
-            emit partidaTerminada(Izquierda);
-            m_temporizador.stop();
-        }
-    } else {
-        if (!todosDestruidos(m_bloquesIzquierda)) return;
+    bool impactoIzquierda = circuloIntersecaRect(
+        m_proyectil.posicion,
+        m_proyectil.radio,
+        rectIzquierda);
 
-        if (circuloIntersecaRect(m_proyectil.posicion, m_proyectil.radio,
-                                 m_rivalIzquierda->sceneBoundingRect())){
-            m_proyectil.activo = false;
-            if (m_itemProyectil) m_itemProyectil->setVisible(false);
-            emit partidaTerminada(Derecha);
-            m_temporizador.stop();
-        }
+    bool impactoDerecha = circuloIntersecaRect(
+        m_proyectil.posicion,
+        m_proyectil.radio,
+        rectDerecha);
+
+    if (!impactoIzquierda && !impactoDerecha)
+        return;
+
+    // Sonido de destrucción (opcional, además del winning)
+    if (sonidoDestruccion) {
+        sonidoDestruccion->stop();
+        sonidoDestruccion->play();
     }
+
+    // Determinar ganador según a quién golpeó y de quién era el turno
+    Bando ganador;
+
+    if (impactoIzquierda && impactoDerecha) {
+        // Caso muy raro: le pega a los dos, damos la victoria al rival del turno
+        ganador = (m_turno == Izquierda) ? Derecha : Izquierda;
+    }
+    else if (impactoIzquierda) {
+        // Golpea al jugador de la izquierda
+        // Si el turno era Izquierda, se auto-disparó → gana Derecha
+        // Si el turno era Derecha, le dio al enemigo → gana Derecha
+        ganador = Derecha;
+    }
+    else { // impactoDerecha
+        // Golpea al jugador de la derecha
+        // Si el turno era Derecha, se auto-disparó → gana Izquierda
+        // Si el turno era Izquierda, le dio al enemigo → gana Izquierda
+        ganador = Izquierda;
+    }
+
+    // Desactivar proyectil y parar la simulación
+    m_proyectil.activo = false;
+    if (m_itemProyectil)
+        m_itemProyectil->setVisible(false);
+    m_temporizador.stop();
+
+    // Marcar que ya hay ganador
+    m_hayGanador = true;
+
+    // --- Parar música de fondo ---
+    if (musicaFondo1) musicaFondo1->stop();
+    if (musicaFondo2) musicaFondo2->stop();
+
+    // --- Reproducir sonido de victoria ---
+    if (sonidoVictoria) {
+        sonidoVictoria->stop();
+        sonidoVictoria->play();
+    }
+
+    // --- Mostrar texto en el centro de la escena ---
+    QString texto;
+
+    if (ganador == Izquierda)
+        texto = tr("¡Gana el jugador de la izquierda!");
+    else
+        texto = tr("¡Gana el jugador de la derecha!");
+
+    texto += "\n\n";
+    texto += tr("Presionar R para jugar de nuevo");
+
+    // Crear o actualizar el texto
+    if (!m_textoFin) {
+        QFont fuente;
+        fuente.setPointSize(16);
+        fuente.setBold(true);
+        m_textoFin = addText(texto, fuente);
+    } else {
+        m_textoFin->setPlainText(texto);
+    }
+
+    m_textoFin->setDefaultTextColor(Qt::black);
+
+    // Centrar el texto en la escena
+    QRectF sr = sceneRect();
+    QRectF br = m_textoFin->boundingRect();
+    m_textoFin->setPos(sr.center().x() - br.width() / 2.0,
+                       sr.center().y() - br.height() / 2.0);
+
+    // Emitir señal por si la ventana principal quiere saberlo (aunque ya no use QMessageBox)
+    emit partidaTerminada(ganador);
 }
 
-// Destruye el proyectil actual y alterna el turno.
+void EscenaJuego::reiniciarJuego()
+{
+    // Detener cualquier cosa que siga sonando
+    if (musicaFondo1) musicaFondo1->stop();
+    if (musicaFondo2) musicaFondo2->stop();
+    if (sonidoVictoria) sonidoVictoria->stop();
+
+    m_temporizador.stop();
+    m_proyectil.activo = false;
+
+    // Limpiar todos los items gráficos
+    clear();
+
+    // Resetear listas y punteros relacionados con la escena
+    m_bloquesIzquierda.clear();
+    m_bloquesDerecha.clear();
+    m_itemProyectil = nullptr;
+    m_rivalIzquierda = nullptr;
+    m_rivalDerecha   = nullptr;
+
+    m_textoFin = nullptr;
+    m_hayGanador = false;
+
+    // Volver al turno inicial
+    m_turno = Izquierda;
+
+    // Volver a montar el mundo
+    configurarMundo();
+
+    // Volver a arrancar la música de fondo desde la canción 1
+    if (musicaFondo1 && musicaFondo2) {
+        musicaFondo1->stop();
+        musicaFondo2->stop();
+        musicaFondo1->play();
+    }
+
+    // Notificar a la ventana que el turno actual cambió
+    emit turnoCambiado(m_turno);
+}
+
+// Destruye el proyectil actual y alterna el turno
 void EscenaJuego::finalizarTurno()
 {
     m_proyectil.activo = false;
@@ -336,3 +582,5 @@ void EscenaJuego::finalizarTurno()
     m_turno = (m_turno == Izquierda) ? Derecha : Izquierda;
     emit turnoCambiado(m_turno);
 }
+
+

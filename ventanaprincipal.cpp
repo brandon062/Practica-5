@@ -2,8 +2,7 @@
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QWidget>
-#include <QMessageBox>
-
+#include <QKeyEvent>
 VentanaPrincipal::VentanaPrincipal(QWidget *parent)
     : QMainWindow(parent)
 {
@@ -66,8 +65,19 @@ void VentanaPrincipal::actualizarEtiquetaTurno(EscenaJuego::Bando bando)
 
 void VentanaPrincipal::mostrarGanador(EscenaJuego::Bando ganador)
 {
-    QString msg = (ganador == EscenaJuego::Izquierda)
-    ? tr("¡Gana el jugador de la izquierda!")
-    : tr("¡Gana el jugador de la derecha!");
-    QMessageBox::information(this, tr("Fin de la partida"), msg);
+    // La escena se encarga de mostrar el texto en el centro.
+    Q_UNUSED(ganador);
+}
+
+void VentanaPrincipal::keyPressEvent(QKeyEvent *event)
+{
+    if (event->key() == Qt::Key_R) {
+        if (m_escena) {
+            m_escena->reiniciarJuego();
+        }
+        event->accept();
+        return;
+    }
+
+    QMainWindow::keyPressEvent(event);
 }
